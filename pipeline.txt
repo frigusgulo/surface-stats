@@ -1,0 +1,4 @@
+gdal_translate -of GTiff -a_srs '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs' -a_nodata -9999 -projwin -2553015 -1307990.00 -2013975.000 -1847030.000 square_dubawnt.tiff dub2.tiff
+
+gdal_merge.py -o "square_dubawnt.tiff" -ul_lr -2483490.000,-1307990.000,-2083500.000,-1847030.000 DEM/*.tif
+

@@ -7,13 +7,19 @@ import geopandas as gp
 from rasterio.windows import Window
 import cv2
 import os
+import json
 import pandas as pd 
+from shapely.geometry import box
+from skgstat import DirectionalVariogram
 
 fields = {'extent':[],'msgl':[],'omnivar':[],'roughness':[]}
 
 class raster():
-	def __init__(self, raster):
-		self.raster = ro.open(raster)
+	def __init__(self, raster,outmeta=None):
+		if outmeta is not None:
+			self.raster = ro.open(raster,**out_meta)
+		else:
+			self.raster = ro.open(raster)
 		self.crs = self.raster.crs
 		print(self.crs)
 		self.res = 2 #2^m per pixel
@@ -31,6 +37,7 @@ class raster():
 	def writeRaster(self,input_,outName):
 		with ro.open(outName,'w',**self.meta) as dst:
 			dst.write(input_.astype(ro.float32))
+			dst = None
 
 	def changeNoData(self,value=None,outname='new_dem.tiff'):
 		array = self.raster.read()
@@ -63,13 +70,15 @@ class raster():
 		return image
 
 	def get_extent(self):
-		coords = np.where(self.raster.read() !=-9999)
+		coords = np.where(self.raster.read()!=-9999,self.raster.read())
 		xmin = np.min(coords[:,0])
 		xmax = np.max(coords[:,0])
 		ymin = np.min(coords[:,1])
 		ymax = np.max(coords[:,1])
 		self.extent_x = (xmin,xmax)
 		self.extent_y = (ymin,ymax)
+		print(self.extent_x)
+		print(self.extent_y)
 
 	def pix2world(self,r,c):
 		x_y = xy(self.affine,r,c,offset='ul')
@@ -81,11 +90,6 @@ class raster():
 		mean = np.mean(image)
 		roughness = (1/(len(image)-1))*((image-mean)**2)
 		return np.sqrt(roughness)
-
-
-	def omniVariogram(self,image):
-		# todo 
-		raise NotImplementedError
 
 
 	def kmltoshp(self, kmlfile):
@@ -112,8 +116,46 @@ class raster():
 				output = os.path.join(path,outname)
 				with ro.open(output,'w',**self.meta) as dst:
 					dst.write(arr.astype(ro.float32))
+	def squareBounds(self,data):
+		data = ro.open(data,'r')
+		bbox = box(self.extent_x[0], self.extent_y[0],self.extent_x[1],self.extent_y[1])
+		geo = gp.GeoDataFrame({'geometry': bbox}, index=[0], crs=self.crs)
+		geo = geo.to_crs(crs=data.crs.data)
+		coords = [json.loads(geo.to_json())['features'][0]['geometry']]
+		out_img, out_transform = mask(raster=data, shapes=coords, crop=True)
+		out_meta = data.meta.copy()
+		epsg_code = int(data.crs.data['init'][5:])
+		out_meta.update({"driver": "GTiff",
+			"height": out_img.shape[1],
+			"width": out_img.shape[2],
+			"transform": out_transform,
+			"crs": pycrs.parser.from_epsg_code(epsg_code).to_proj4()})
+		self.meta = out_meta
+		self.writeRaster(data,'squarebounds.tiff')
 
+	def getRange(self,mat,azimuth):
+		# fits an anisotropic variogram model and returns the effective range for a given azimuth
+		mat = np.squeeze(mat)
+		m,n = mat.shape
+		coords = []
+		for i in range(m):
+			for j in range(n):
+				coords.append((i,j))
+		coords = np.array(coords)
+		response = np.ndarray.flatten(mat)
+		DV = DirectionalVariogram(coords,response,azimuth,tolerance=15,maxlag=int(m/2),n_lags=int(m/10))
+		return DV.cof[0]
 
+	def genCovariate(self,mat):
+		# Generates a covariate matrix from response variables
+		response = np.flatten(np.squeeze(mat))
+		mu = np.mean(reponse)
+		n = len(response)
+		covar = np.zeros(n,n)
+		for i in range(n):
+			for j in range(n):
+				covar[i,j] = (response[i] - mu)*(response[j] - mu)
+		return covar
 
 '''
 if __name__ == '__main__':
