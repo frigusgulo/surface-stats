@@ -5,6 +5,9 @@ from scipy.ndimage import gaussian_filter
 import time
 import sys
 def rasterClass():
+
+
+
 	def __init__(raster,labels,df=None,grid=500):
 		self.res = 10 #m^2/pixel
 		self.grid = grid
@@ -95,6 +98,7 @@ def rasterClass():
 					featuredicts.append(self.comatprops(glcm,theta))
 				features = self.mergeDicts(featuredicts)
 				features["Srough"] = self.surfRough(image)
+				features["label"] = self.labels[i,j] # Not sure if this is the correct indexing, check old renditions of rasterClass()
 				self.dataframe = self.dataframe.append(features,ignore_index=True)
 				end = time.time() - start
 				print("Quadrat {} Done, Elapsed Time: {}".format(counter,end))
