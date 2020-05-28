@@ -97,7 +97,7 @@ def rasterClass():
 				features["Srough"] = self.surfRough(image)
 				self.dataframe = self.dataframe.append(features,ignore_index=True)
 				end = time.time() - start
-				print("\nQuadrat {} Done, Elapsed Time: {}\n".format(counter,end))
+				print("Quadrat {} Done, Elapsed Time: {}".format(counter,end))
 				counter += 1
 		overall = time.time() - overall
 		print("\n\n\nIteration Done, Elapse Time: {} Hours".format(overall/3600))
