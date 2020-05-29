@@ -9,7 +9,7 @@ class rasterClass():
 
 
 
-	def __init__(self,raster,labels=None,df=None,grid=500):
+	def __init__(self,raster,name=None,labels=None,df=None,grid=500):
 		self.res = 10 #m^2/pixel
 		self.grid = grid
 		self.raster = np.load(raster)
@@ -108,10 +108,12 @@ class rasterClass():
 				featuredicts = [self.comatprops(glcm)]
 				features = self.mergeDicts(featuredicts)
 				features["Srough"] = self.surfRough(image)
-				if labels is not None:
+				if self.labels is not None:
 					features["label"] = self.labels[i,j] # Not sure if this is the correct indexing, check old renditions of rasterClass()
 				else:
 					features["label"] = None
+				if self.name is not None:
+					features["Area"] = self.name
 
 				self.dataframe = self.dataframe.append(features,ignore_index=True)
 				end = time.time() - start
