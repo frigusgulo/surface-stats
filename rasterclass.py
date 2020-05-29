@@ -25,6 +25,7 @@ class rasterClass():
 			self.dataframe = pd.DataFrame.load(df)
 		else:
 			self.dataframe = pd.DataFrame()
+		self.name = name
 
 	def detrend(self,sigma=200):
 		#perform detrending by applying a gaussian filter with a std of 200m, and detrend
@@ -38,19 +39,27 @@ class rasterClass():
 	def quantize(self):
 		if self.detrend_: 
 			self.raster += (np.abs(np.min(self.raster)) + 1)
-			mean = np.nanmean(self.raster)
-			std = np.nanstd(self.raster)
+			mean = np.nanmean(self.raster[self.raster > 0])
+			std = np.nanstd(self.raster[self.raster > 0])
+
+			self.raster[self.raster == None] = 0 # set all None values to 0
+			self.raster[np.isnan(self.raster)] = 0
+			self.raster = np.rint(self.raster)
+			self.raster = self.raster.astype(int)
 
 			self.raster[self.raster > (mean + 1.5*std)] = 0
 			self.raster[self.raster < (mean - 1.5*std)] = 0 # High pass filter
-			self.raster[self.raster == None] = 0 # set all None values to 0
-			self.raster[np.isnan(self.raster)] = 0
+
+			self.raster[self.raster > 0] = self.raster[self.raster > 0] - (np.min(self.raster[self.raster > 0]) - 1)
+
+			self.raster[self.raster>101] = 0
+
 			
 			flat = np.ndarray.flatten(self.raster[self.raster > 0])
 			range = np.max(flat) - np.min(flat)
 			print("\n\nRaster Range: {}\n\n".format(range))
-			self.raster = np.rint(self.raster)
-			self.raster[self.raster > 101] = 0 #remove values greater than 101 for the GLCM
+			#self.raster[self.raster > 101] = 0 #remove values greater than 101 for the GLCM
+
 		else:
 			raise ValueError("Raster Has Not Been Detrended")
 
@@ -63,6 +72,8 @@ class rasterClass():
 			for j in range(len(self.distances)):
 				matrices[:,:,j,i] = matrices[:,:,j,i]/np.sum(matrices[:,:,j,i]) # normalize each matrix to sum to 1
 		return matrices
+
+
 	def comatprops(self,image):
 		# returns a haralick feature for each image respective to a given azimuth
 		features = {}
@@ -87,8 +98,8 @@ class rasterClass():
 
 	def mergeDicts(self,dicts):
 		main = {}
-		for dict in dicts:
-			main = {**dict}
+		for dict_ in dicts:
+			main = {**dict_}
 		#main = sorted(main.items())
 		return main
 
@@ -98,6 +109,7 @@ class rasterClass():
 		self.dataframe.to_pickle(path=path)
 
 	def iterate(self):
+		print("Raster Datatype: {}".format(self.raster.dtype))
 		counter = 0
 		overall = time.time()
 		for i in range(0,self.rasterWidth,self.grid):
