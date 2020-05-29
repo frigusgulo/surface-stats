@@ -4,67 +4,79 @@ from skimage.feature import greycomatrix,greycoprops
 from scipy.ndimage import gaussian_filter
 import time
 import sys
-def rasterClass():
+import matplotlib.pyplot as plt
+class rasterClass():
 
 
 
-	def __init__(raster,labels,df=None,grid=500):
+	def __init__(self,raster,labels=None,df=None,grid=500):
 		self.res = 10 #m^2/pixel
 		self.grid = grid
 		self.raster = np.load(raster)
-		self.labels = np.load(labels)
+		if labels is not None:
+			self.labels = np.load(labels)
 		self.rasterWidth = self.raster.shape[0]
 		self.rasterHeight = self.raster.shape[1]
 		self.azis = [0,45,90,135]
 		self.distances = [0]
 		self.textProps = ['contrast','dissimilarity','homogeneity','ASM','energy','correlation']
-		self.detrend = False
+		self.detrend_ = False
 		if df is not None:
 			self.dataframe = pd.DataFrame.load(df)
 		else:
 			self.dataframe = pd.DataFrame()
 
-	def detrend(self,sigma=20*self.res):
+	def detrend(self,sigma=200):
 		#perform detrending by applying a gaussian filter with a std of 200m, and detrend
-		self.raster -= gaussian_filter(self.raster,sigma=sigma)
-		self.detrend = True
+		trend = gaussian_filter(self.raster,sigma=sigma)
+		self.raster -= trend
+		self.detrend_ = True
 
 	def surfRough(self,image):
 		return np.nanstd(image)
 
 	def quantize(self):
-		if self.detrend:
+		if self.detrend_: 
 			self.raster += (np.abs(np.min(self.raster)) + 1)
+			mean = np.nanmean(self.raster)
+			std = np.nanstd(self.raster)
+
+			self.raster[self.raster > (mean + 1.5*std)] = 0
+			self.raster[self.raster < (mean - 1.5*std)] = 0 # High pass filter
 			self.raster[self.raster == None] = 0 # set all None values to 0
 			self.raster[np.isnan(self.raster)] = 0
-			print("\n\nRaster Range: {}\n\n".format(np.max(self.raster) - np.min(self.raster)))
-			self.raster = int(self.raster)
+			
+			flat = np.ndarray.flatten(self.raster[self.raster > 0])
+			range = np.max(flat) - np.min(flat)
+			print("\n\nRaster Range: {}\n\n".format(range))
+			self.raster = np.rint(self.raster)
 			self.raster[self.raster > 101] = 0 #remove values greater than 101 for the GLCM
 		else:
 			raise ValueError("Raster Has Not Been Detrended")
 
-	def greycomattrix(self,image):
+	def greycomatrix(self,image):
 		# returns a [(levels,levels),distance,angle] array
 		matrices = greycomatrix(image,distances=self.distances,angles=self.azis,levels=102,symmetric=True)
 		matrices = matrices[1:,1:,:,:] # remove entries respectice to Nan values
+		print("marix shape: {}".format(matrices.shape))
 		for i in range(len(self.azis)):
-			for j in range(len(self.distances))
-				matrices[:,:,j,i] /= np.sum(matrices[:,:,j,i]) # normalize each matrix to sum to 1
-
-	def comatprops(self,image,theta):
+			for j in range(len(self.distances)):
+				matrices[:,:,j,i] = matrices[:,:,j,i]/np.sum(matrices[:,:,j,i]) # normalize each matrix to sum to 1
+		return matrices
+	def comatprops(self,image):
 		# returns a haralick feature for each image respective to a given azimuth
 		features = {}
 		for prop in self.textProps:
-			features[str(theta) + "_" + prop ] = greycoprops(image,prop=prop)
+			features[prop] = greycoprops(image,prop=prop)
 		return features
 
-	def boxPlot(self)
+	def boxPlot(self):
 		'''
 		Create a boxplot of the response values so as to see if the data falls within a given range upon trend removal.
 		The quantization step assumes that the data has been detrended so as to reduce the range of elevation values
 		<= 100
 		'''
-		if self.detrend:
+		if self.detrend_:
 			fig,ax = plt.subplots()
 			ax.set_title("Boxplot of Detrended Elevation Values")
 			ax.boxplot(np.ndarray.flatten(self.raster))
@@ -77,7 +89,7 @@ def rasterClass():
 		main = {}
 		for dict in dicts:
 			main = {**dict}
-		main = sorted(main.items())
+		#main = sorted(main.items())
 		return main
 
 	def saveDF(self,path):
@@ -85,20 +97,22 @@ def rasterClass():
 		print(self.dataframe.head())
 		self.dataframe.to_pickle(path=path)
 
-	def iterate():
+	def iterate(self):
 		counter = 0
 		overall = time.time()
 		for i in range(0,self.rasterWidth,self.grid):
 			for j in range(0,self.rasterHeight,self.grid):
 				start = time.time()
 				image = self.raster[i:i+self.grid,j:j+self.grid]
-				glcm = self.greycomatrix(image)
-				featuredicts = []
-				for theta in self.azis:
-					featuredicts.append(self.comatprops(glcm,theta))
+				glcm =  self.greycomatrix(image)
+				featuredicts = [self.comatprops(glcm)]
 				features = self.mergeDicts(featuredicts)
 				features["Srough"] = self.surfRough(image)
-				features["label"] = self.labels[i,j] # Not sure if this is the correct indexing, check old renditions of rasterClass()
+				if labels is not None:
+					features["label"] = self.labels[i,j] # Not sure if this is the correct indexing, check old renditions of rasterClass()
+				else:
+					features["label"] = None
+
 				self.dataframe = self.dataframe.append(features,ignore_index=True)
 				end = time.time() - start
 				print("Quadrat {} Done, Elapsed Time: {}".format(counter,end))
@@ -108,7 +122,7 @@ def rasterClass():
 
 	def runAll(self,path):
 		self.detrend()
-		self.boxPlot()
+		#self.boxPlot()
 		self.quantize()
 		self.iterate()
 		self.saveDF(path)
