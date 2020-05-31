@@ -5,6 +5,9 @@ from scipy.ndimage import gaussian_filter
 import time
 import sys
 import matplotlib.pyplot as plt
+from joblib import Memory
+location = "./cachedir"
+memory = Memory(location,verbose=0)
 class rasterClass():
 
 
@@ -26,7 +29,7 @@ class rasterClass():
 		else:
 			self.dataframe = pd.DataFrame()
 		self.name = name
-
+	@memory.cache 
 	def detrend(self,sigma=200):
 		#perform detrending by applying a gaussian filter with a std of 200m, and detrend
 		trend = gaussian_filter(self.raster,sigma=sigma)
@@ -36,6 +39,7 @@ class rasterClass():
 	def surfRough(self,image):
 		return np.nanstd(image)
 
+	@memory.cache
 	def quantize(self):
 		if self.detrend_: 
 			self.raster += (np.abs(np.min(self.raster)) + 1)
@@ -62,7 +66,7 @@ class rasterClass():
 
 		else:
 			raise ValueError("Raster Has Not Been Detrended")
-
+	@memory.cache
 	def greycomatrix(self,image):
 		# returns a [(levels,levels),distance,angle] array
 		matrices = greycomatrix(image,distances=self.distances,angles=self.azis,levels=102,symmetric=True)
@@ -73,7 +77,7 @@ class rasterClass():
 				matrices[:,:,j,i] = matrices[:,:,j,i]/np.sum(matrices[:,:,j,i]) # normalize each matrix to sum to 1
 		return matrices
 
-
+	@memory.cache
 	def comatprops(self,image):
 		# returns a haralick feature for each image respective to a given azimuth
 		features = {}
@@ -95,7 +99,7 @@ class rasterClass():
 			raise ValueError("Raster Has Not Been Detrended")
 
 
-
+		
 	def mergeDicts(self,dicts):
 		main = {}
 		for dict_ in dicts:
