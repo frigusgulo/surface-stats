@@ -19,9 +19,9 @@ if __name__ == "__main__":
 	thwaitesdem = '/home/dunbar/DEM/thwaitsdem.npy'
 	thwaitesname = "thwaites"
 
-	#dubawnt = rasterClass(dubdem,dubname,dublab)
+	dubawnt = rasterClass(dubdem,dubname,dublab)
 
-	#dubawnt.runAll(path=dataframe) done!
+	dubawnt.runAll(path=dataframe) 
 
 	testset =  rasterClass(testdem,testname,testlabel,df=dataframe)
 	testset.runAll()

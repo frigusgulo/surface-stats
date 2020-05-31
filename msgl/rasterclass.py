@@ -33,7 +33,7 @@ def quantize(raster):
 		raster.raster[raster.raster < (mean - 1.5*std)] = 0 # High pass filter
 
 		raster.raster[raster.raster > 0] = raster.raster[raster.raster > 0] - (np.min(raster.raster[raster.raster > 0]) - 1)
-		raster.raster[raster.raster>101] = 0
+		raster.raster[raster.raster> 99] = 0
 		raster.raster = np.rint(raster.raster)
 		
 		
@@ -66,7 +66,7 @@ class rasterClass():
 		elif labels is not None:
 			self.labels = np.load(labels)
 
-		self.azis = [0]#[0, np.pi/4, np.pi/2, 3*np.pi/4]
+		self.azis = [0, np.pi/4, np.pi/2, 3*np.pi/4]
 		self.distances = [1,2,3,4,5]
 		self.textProps = ['contrast','dissimilarity','homogeneity','ASM','energy','correlation']
 		self.detrend_ = False
@@ -104,7 +104,8 @@ class rasterClass():
 	#@memory.cache
 	def comatprops(self,image):
 		# returns a haralick feature for each image respective to a given azimuth
-		image = np.sum(image,axis=2,keepdims=True) # sum all occurences within a given distance
+		for i in range(len(self.azis)):
+			image[:,:,:,:i] =  np.sum(image[:,:,:,i],axis=2,keepdims=True)
 		features = {}
 		for prop in self.textProps:
 			featvec = greycoprops(image,prop=prop)
