@@ -67,7 +67,7 @@ class rasterClass():
 			self.labels = np.load(labels)
 
 		self.azis = [0, np.pi/4, np.pi/2, 3*np.pi/4]
-		self.distances = [1,2,3,4,5]
+		self.distances = np.arange(250) + 1
 		self.textProps = ['contrast','dissimilarity','homogeneity','ASM','energy','correlation']
 		self.detrend_ = False
 		self.dfpath = df
