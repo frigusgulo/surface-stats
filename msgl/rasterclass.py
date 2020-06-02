@@ -105,7 +105,7 @@ class rasterClass():
 	def comatprops(self,image):
 		# returns a haralick feature for each image respective to a given azimuth
 		for i in range(len(self.azis)):
-			image[:,:,:,:i] =  np.sum(image[:,:,:,i],axis=2,keepdims=True)
+			image[:,:,:,i] =  np.sum(image[:,:,:,i],axis=2,keepdims=True)
 		features = {}
 		for prop in self.textProps:
 			featvec = greycoprops(image,prop=prop)
