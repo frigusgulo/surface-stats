@@ -1,4 +1,4 @@
-from msgl.rasterclass import rasterClass
+from msgl.rasterclass import rasterClass,detrend,quantize
 import numpy as np
 
 if __name__ == "__main__":
@@ -16,20 +16,21 @@ if __name__ == "__main__":
 	brookname = "brooks"
 	brookslabel = 0
 
-	thwaitesdem = '/home/fdunbar/Research/Data/Thwaites/thwaitsdem.npy'
+	thwaitesdem = '/home/fdunbar/Research/Data/Thwaites/thwaitesdem.npy'
 	thwaitesname = "thwaites"
 
 	dubawnt = rasterClass(dubdem,dubname,dublab)
-
 	dubawnt.runAll(path=dataframe) 
 
+	print("\n\n Test Set \n\n")
 	testset =  rasterClass(testdem,testname,testlabel,df=dataframe)
 	testset.runAll()
 
-	brooks =  rasterClass(brookdem,brookname,brookslabel,df=dataframe)
-	brooks.runAll()
-
-	thwaites =  rasterClass(thwaitesdem,thwaitesname,df=dataframe)
+	#brooks =  rasterClass(brookdem,brookname,brookslabel,df=dataframe)
+	#brooks.runAll()
+	
+	print("\n\n Thwaites \n\n")
+	thwaites =  rasterClass(thwaitesdem,name=thwaitesname,df=dataframe)
 	thwaites.runAll()
 
 	try:
