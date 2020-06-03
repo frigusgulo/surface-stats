@@ -136,7 +136,7 @@ class rasterClass():
 			sums = np.sum(image[:,:,:,i],axis=2)
 			sums = sums / np.sum(sums)
 			image[:,:,0,i] =  np.reshape(sums,(image[:,:,0,i].shape))
-			np.delete(image,self.distances[1:],2)
+			image = np.delete(image,self.distances,2)
 		features = {}
 		for prop in self.textProps:
 			featvec = greycoprops(image,prop=prop)
@@ -168,11 +168,6 @@ class rasterClass():
 
 	def saveDF(self,path):
 		print("\n\nSaving DataFrame\n\n")
-		try:
-			print(self.dataframe.head())
-		except:
-			print("Dataframe not found")
-
 		if self.dfpath == None:
 			self.dataframe.to_pickle(path=path)
 		elif path==None:
