@@ -12,6 +12,15 @@ location = "/tmp"
 memory = Memory(location,verbose=0)
 
 #@memory.cache
+
+
+#
+'''
+Reduce distances for greycomatrix
+fix status bars
+use different haralick features?
+
+'''
 def detrend(rasterclass):
 	#perform detrending by applying a gaussian filter with a std of 200m, and detrend
 
@@ -23,13 +32,12 @@ def detrend(rasterclass):
 			chunk = rasterclass.raster[i:i+step,j:j+step]
 			chunk[np.isnan(chunk)] = 0
 			chunk[chunk==None] = 0
-			trend = gaussian_filter(chunk,sigma=200)
+			trend = gaussian_filter(chunk,sigma=400)
 			chunk = chunk - trend
 			rasterclass.raster[i:i+step,j:j+step] = chunk
 			chunk = None
 			bar.next()
 	bar.finish()
-	print("Trend passed")
 	rasterclass.detrend_ = True
 
 
@@ -50,21 +58,21 @@ def quantize(raster):
 		        meanlist.append(np.nanmean(chunk))
 		        stdlist.append(np.nanstd(chunk))
 		        raster.raster[i:i+step,j:j+step] = chunk
-		    mean_ = np.mean(meanlist)
+		    mean_ = np.median(meanlist)
 		    meanlist = [mean_]
-		    std_ = np.mean(stdlist)
+		    std_ = np.median(stdlist)
 		    stdlist = [std_]
 		    chunk = None
 
-		mean = np.mean(meanlist)
-		std = np.mean(stdlist)
+		mean = np.median(meanlist)
+		std = np.median(stdlist)
 
 		min_ = np.inf
 		for i in range(0,m,step):
 			for j in range(0,n,step):
 				chunk = raster.raster[i:i+step,j:j+step]
-				chunk[chunk > (mean + 1*std)] = 0
-				chunk[chunk < (mean - 1*std)] = 0
+				chunk[chunk > (mean + 2*std)] = 0
+				chunk[chunk < (mean - 2*std)] = 0
 				chunk = np.rint(chunk)
 				chunk[chunk>99] = 0
 				raster.raster[i:i+step,j:j+step] = chunk
@@ -134,7 +142,7 @@ class rasterClass():
 		# returns a haralick feature for each image respective to a given azimuth
 		for i in range(len(self.azis)):
 			sums = np.sum(image[:,:,:,i],axis=2)
-			sums = sums / np.sum(sums)
+			#sums = sums / np.sum(sums)
 			image[:,:,0,i] =  np.reshape(sums,(image[:,:,0,i].shape))
 			image = np.delete(image,self.distances,2)
 		features = {}

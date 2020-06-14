@@ -34,6 +34,6 @@ if __name__ == "__main__":
 	thwaites.runAll()
 
 	try:
-		thwaites.dataframe.to_html("msgldata.html")
+		thwaites.dataframe.to_html("/home/fdunbar/Research/Data/msgldata.html")
 	except:
 		print("To html failed")
