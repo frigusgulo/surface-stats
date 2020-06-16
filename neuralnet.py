@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import pdb
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -12,26 +13,38 @@ from torch.utils.data import Dataset, DataLoader
 from torch.autograd import Variable
 import numpy as np 
 
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.metrics import confusion_matrix
+from sys import stdout
+
+
 class Dataset(Dataset):
-  'Characterizes a dataset for PyTorch'
-  def __init__(self, features, labels):
+    'Characterizes a dataset for PyTorch'
+    def __init__(self, features, labels):
         'Initialization'
         self.labels = labels
         self.features = features
 
-  def __len__(self):
+    def __len__(self):
         'Denotes the total number of samples'
         return len(self.labels)
 
-  def __getitem__(self, index):
+    def __getitem__(self, index):
         'Generates one sample of data'
         # Select sample
-     
+       
         # Load data and get label
         X = self.features[index,:]
         Y = self.labels[index]
 
         return X, Y
+    
+    def scale(self, scaler, train):
+        if train:
+            self.features = scaler.fit_transform(self.features)
+        else:
+            self.features = scaler.transform(self.features)
+
 
 def unpickle(path):
     with open(path,'rb') as file:
@@ -48,25 +61,31 @@ def is_valid_file(parser, arg):
 
 
 class Net(nn.Module):
+
+    
     def __init__(self,input_size):
         super(Net,self).__init__()
-        hidden1 = 512
-        hidden2 = 256
-        hidden3 = 128
+        hidden1 = 256
+        hidden2 = 128
+        hidden3 = 64
 
         self.fc1 = nn.Linear(input_size, hidden1)
-        self.relu1 = nn.Sigmoid()
+        self.bn1 = nn.BatchNorm1d(hidden1)
+        self.relu = nn.ReLU()
 
         # second hidden layer
         self.fc2 = nn.Linear(hidden1, hidden2)
-        self.relu2 = nn.Sigmoid()
+        self.bn2 = nn.BatchNorm1d(hidden2)
+
 
         # third hidden layer
         self.fc3 = nn.Linear(hidden2, hidden3)
-        self.relu3 = nn.Sigmoid()
+        self.bn3 = nn.BatchNorm1d(hidden3)
 
         # last output layer
-        self.output = nn.Linear(in_features=hidden3,out_features=2) #single output between 0,1
+        self.output = nn.Linear(in_features=hidden3, out_features=1) #single output between 0,1
+
+        self.sigmoid = torch.nn.Sigmoid()
 
 
 
@@ -76,35 +95,30 @@ class Net(nn.Module):
         Last layer gives us predictions.
         '''
         state = self.fc1(x.float())
-        state = self.relu1(state)
+        state = self.bn1(self.relu(state))
 
         state = self.fc2(state)
-        state = self.relu2(state)
+        state = self.bn2(self.relu(state))
 
         state = self.fc3(state)
-        state = self.relu3(state)
+        state = self.bn3(self.relu(state))
 
         final = self.output(state)
-        return final
+        return self.sigmoid(final)
 
 
-def train(args, model,criterion, device, train_loader, optimizer, epoch):
+def train(args, model, criterion, device, train_loader, optimizer, epoch,
+        verbose=True):
     model.train()
     for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
+        data, target = data.to(device), target.to(device).unsqueeze(1)
         optimizer.zero_grad()
         output = model(data)
-        onehot = torch.zeros_like(output)
-        for i in range(np.max(output.shape)):
-            subtarg = torch.zeros_like(output)
-            #print(np.int(target[i].item()))
-            subtarg[np.int(target[i].item())] = 1
-            
-        loss = criterion(output,torch.max(subtarg, 1)[1])
+        loss = criterion(output, target)
         loss.backward()
         optimizer.step()
-        if batch_idx % args.log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+        if batch_idx % args.log_interval == 0 and verbose:
+            print('Train Epoch: {} [{}/{} ({:.0f}%)]\t\tLoss: {:.6f}'.format(
                 epoch,
                 batch_idx * len(data), 
                 len(train_loader.dataset),
@@ -113,7 +127,7 @@ def train(args, model,criterion, device, train_loader, optimizer, epoch):
                 ))
 
 
-def test(model,criterion, device, test_loader):
+def test(model, criterion, device, test_loader):
     model.eval()
     test_loss = 0
     correct = 0
@@ -121,19 +135,12 @@ def test(model,criterion, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.to(device).unsqueeze(1)
             output = model(data)
-            onehot = torch.zeros_like(output)
-            for i in range(np.max(output.shape)):
-                subtarg = torch.zeros_like(output)
-                #print(np.int(target[i].item()))
-                subtarg[np.int(target[i].item())] = 1
-            #print(subtarg)
-            #print(output)
-            test_loss += criterion(output,torch.max(subtarg,1)[1]).item()  # sum up batch loss
-            pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
-            print(pred)
-            correct += pred.eq(target.view_as(pred)).sum().item()
+            test_loss += criterion(output, target)  # sum up batch loss
+            pred = torch.round(output)
+            correct += torch.sum(pred == target)
 
     test_loss /= len(test_loader.dataset)
+    accuracy = correct / len(test_loader.dataset)
 
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
         test_loss, correct, len(test_loader.dataset),
@@ -143,7 +150,7 @@ def test(model,criterion, device, test_loader):
 def main():
     # Training settings
     parser = argparse.ArgumentParser(description='PyTorch MNIST Example')
-    parser.add_argument('--batch-size', type=int, default=64, metavar='N',
+    parser.add_argument('--batch-size', type=int, default=32, metavar='N',
                         help='input batch size for training (default: 64)')
     parser.add_argument('--test-batch-size', type=int, default=128, metavar='N',
                         help='input batch size for testing (default: 1000)')
@@ -157,7 +164,7 @@ def main():
                         help='disables CUDA training')
     parser.add_argument('--seed', type=int, default=1, metavar='S',
                         help='random seed (default: 1)')
-    parser.add_argument('--log-interval', type=int, default=20, metavar='N',
+    parser.add_argument('--log-interval', type=int, default=10, metavar='N',
                         help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=False,
                         help='For Saving the current Model')
@@ -184,7 +191,10 @@ def main():
 
     kwargs = {'num_workers': 1, 'pin_memory': True} if use_cuda else {}
 
-    train_data = unpickle(args.trainset)
+    scaler = StandardScaler()
+    train_data = unpickle(args.trainset) # pickled Dataset
+    train_data.features = scaler.fit_transform(train_data.features)
+
 
     print("Training Data Length: {}\n".format(len(train_data)))
     train_loader = torch.utils.data.DataLoader(
@@ -195,6 +205,11 @@ def main():
     
 
     test_data = unpickle(args.testset)
+    test_data.features = scaler.transform(test_data.features)
+    f = test_data.labels
+
+
+
 
     print("Test Data Length: {}\n".format(len(test_data)))
     test_loader = torch.utils.data.DataLoader(
@@ -205,15 +220,26 @@ def main():
 
     model = Net(25).to(device)
  
-    optimizer = optim.Adadelta(model.parameters(), lr=args.lr)
-    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = optim.Adam(model.parameters(), lr=2e-3)
+    criterion = torch.nn.BCELoss()
 
-    scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
+    # scheduler = StepLR(optimizer, step_size=1, gamma=args.gamma)
     for epoch in range(1, args.epochs + 1):
-        train(args, model,criterion, device, train_loader, optimizer, epoch)
+        train(args, model, criterion, device, train_loader, optimizer, epoch,
+                verbose=True)
         test(model,criterion,device, test_loader)
-        scheduler.step()
-
+        '''
+        with torch.no_grad():
+            preds = model(torch.tensor(test_data.features))
+            preds, labels = np.round(preds).numpy().squeeze(), test_data.labels
+            test_acc = np.sum(preds == labels) / len(labels)
+            # print(confusion_matrix(preds, labels))
+            preds = model(torch.tensor(train_data.features))
+            preds, labels = np.round(preds).numpy().squeeze(), train_data.labels
+            stdout.write("epoch: {}. train acc: {:.3f}, test acc: {:.3f}\r".format(epoch, np.sum(preds == labels) \
+                    / len(labels), test_acc))
+        '''
+            # print(confusion_matrix(preds, labels))
     if args.save_model:
         torch.save(model.state_dict(), "/home/fdunbar/Research/surface-stats/msgl_nn.pt")
 
