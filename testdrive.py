@@ -26,9 +26,10 @@ if __name__ == "__main__":
 	testset =  rasterClass(testdem,testname,testlabel,df=dataframe)
 	testset.runAll()
 
-	#brooks =  rasterClass(brookdem,brookname,brookslabel,df=dataframe)
-	#brooks.runAll()
+	brooks =  rasterClass(brookdem,brookname,labels=brookslabel,df=dataframe)
+	brooks.runAll()
 	
+
 	print("\n\n Thwaites \n\n")
 	thwaites =  rasterClass(thwaitesdem,name=thwaitesname,df=dataframe)
 	thwaites.runAll()
@@ -37,3 +38,4 @@ if __name__ == "__main__":
 		thwaites.dataframe.to_html("/home/fdunbar/Research/Data/msgldata.html")
 	except:
 		print("To html failed")
+	

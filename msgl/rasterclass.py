@@ -74,7 +74,7 @@ def quantize(raster):
 				chunk[chunk > (mean + 2*std)] = 0
 				chunk[chunk < (mean - 2*std)] = 0
 				chunk = np.rint(chunk)
-				chunk[chunk>99] = 0
+				chunk[chunk>54] = 0
 				raster.raster[i:i+step,j:j+step] = chunk
 				if np.min(chunk) is not None and np.min(chunk) < min_ :
 					min_ = np.min(chunk)
@@ -86,10 +86,14 @@ def quantize(raster):
 
 
 
+
 			
 		flat = np.ndarray.flatten(raster.raster[raster.raster > 0])
 		range_ = np.max(flat) - np.min(flat)
 		print("\n\nRaster Range: {}\n\n".format(range_))
+		if range_ - 49 > 0: 
+			cutoff = range_ - 49
+			raster.raster[raster.raster == np.max(flat)] -= cutoff 
 
 	
 	else:
@@ -103,14 +107,16 @@ class rasterClass():
 		self.grid = grid
 		self.raster = np.load(raster)
 		if isinstance(labels,(int)):
-			labels = np.ones( (int(self.raster.shape[0]/grid),int(self.raster.shape[1]/grid)) )*labels
+			self.labels = np.zeros( (int(self.raster.shape[0]/grid),int(self.raster.shape[1]/grid)) )
 		elif labels is not None:
 			self.labels = np.load(labels)
 		else:
 			self.labels = None
+	
+		self.azis =  [0, np.pi/6, np.pi/4, np.pi/3, np.pi/2,2*np.pi/3, 3*np.pi/4,5*np.pi/6]
 
-		self.azis = [0, np.pi/4, np.pi/2, 3*np.pi/4]
-		self.distances = np.arange(15) + 1
+		self.distance = 20
+		self.distances = np.arange(self.distance)
 		self.textProps = ['contrast','dissimilarity','homogeneity','ASM','energy','correlation']
 		self.detrend_ = False
 		self.dfpath = df
@@ -130,7 +136,7 @@ class rasterClass():
 	def greycomatrix(self,image):
 		# returns a [(levels,levels),distance,angle] array
 	
-		matrices = greycomatrix(image,distances=self.distances,levels=100,angles=self.azis,symmetric=True,normed=True)
+		matrices = greycomatrix(image,distances=self.distances,levels=55,angles=self.azis)
 		matrices = matrices[1:,1:,:,:] # remove entries respectice to Nan values
 		
 		return matrices
@@ -140,14 +146,23 @@ class rasterClass():
 	def comatprops(self,image):
 		
 		# returns a haralick feature for each image respective to a given azimuth
+		temp = np.zeros((image.shape[0],image.shape[1],1,image.shape[3]))
+
 		for i in range(len(self.azis)):
 			sums = np.sum(image[:,:,:,i],axis=2)
-			#sums = sums / np.sum(sums)
-			image[:,:,0,i] =  np.reshape(sums,(image[:,:,0,i].shape))
-			image = np.delete(image,self.distances,2)
+			temp[:,:,0,i] =  np.reshape(sums,(temp[:,:,0,i].shape))
+
+			# Sum freqs along all distances and store in first entry on the 2nd axis
+			# remove all other distances
+			
+			
+			temp[:,:,0,i] = temp[:,:,0,i] + temp[:,:,0,i].transpose() #make symmetric
+			temp[:,:,0,i] = temp[:,:,0,i] / np.sum(temp[:,:,0,i]) # normalize
+			
+			
 		features = {}
 		for prop in self.textProps:
-			featvec = greycoprops(image,prop=prop)
+			featvec = greycoprops(temp,prop=prop)
 			#print("\n",featvec,"\n")
 			features[prop] =featvec
 		return features
@@ -195,6 +210,7 @@ class rasterClass():
 				
 				image = self.raster[i:i+self.grid,j:j+self.grid]
 				glcm =  self.greycomatrix(image)
+				
 				featuredicts = [self.comatprops(glcm)]
 				features = self.mergeDicts(featuredicts)
 				features["Srough"] = self.surfRough(image)
@@ -213,6 +229,7 @@ class rasterClass():
 
 	def runAll(self,path=None):
 		detrend(self)
+	
 		quantize(self)
 		self.iterate()
 		self.saveDF(path)

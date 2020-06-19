@@ -11,7 +11,8 @@ def writedata(object_,path):
 	file.close()
 
 def unwrap(dataset,features_):
-	featurevector = np.empty([1,26])
+	dataset = dataset.reset_index(drop=True)
+	featurevector = np.empty([1,50])
 	idx_0 = dataset.first_valid_index()
 	for idx in range(idx_0,len(dataset)+idx_0):
 		trainingfeats = []
@@ -68,21 +69,22 @@ class Dataset(Dataset):
 dataframe = "/home/fdunbar/Research/Data/MSGL_Data.pkl"
 
 dataframe = pd.read_pickle(dataframe)
+print(dataframe["Area"].unique())
 
-trainingareas = ['dubawnt']
-testareas = ['test']
+
 #thwaites = ['thwaites']
 
 features = ['contrast','dissimilarity','homogeneity','ASM','energy','correlation','Srough','label']
 
-trainingdata = dataframe[dataframe["Area"]=='dubawnt']
+trainingdata = dataframe[dataframe["Area"]== 'dubawnt']
+trainingdata = trainingdata.append(dataframe[dataframe["Area"] == 'brooks'])
 testdata = dataframe[dataframe["Area"]=='testset']  
 #thwaitesdat = dataframe[dataframe["Area"] == 'thwaites']
 
 
 
-
 print("Processing trainingdata\n")
+print(trainingdata["Area"].unique())
 trainingdata = unwrap(trainingdata,features)
 
 print("Processing testdata \n")
