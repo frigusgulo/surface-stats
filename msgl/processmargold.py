@@ -11,6 +11,7 @@ def writedata(object_,path):
 	file.close()
 
 def unwrap(dataset,features_):
+	print(len(dataset))
 	dataset = dataset.reset_index(drop=True)
 	featurevector = np.empty([1,42])
 	idx_0 = dataset.first_valid_index()
@@ -72,47 +73,41 @@ class Dataset(Dataset):
 
         return X, Y
 
-dataframe = "/home/fdunbar/Research/Data/MSGL_Data_100_logtransformlevels_dist5.pkl"
+
+dataframe = '/home/fdunbar/Research/surface-stats/margolddataframe.pkl'
 
 dataframe = pd.read_pickle(dataframe)
 print(dataframe["Area"].unique())
+datasets = dataframe["Area"].unique()
+
+features = ['Srough','contrast','dissimilarity','correlation','variance','entropy','label']
+
+margold_orig = unwrap(dataframe[dataframe["Area"]==datasets[0]],features)
+
+margold_radar_10 = unwrap(dataframe[dataframe["Area"] == datasets[1]],features)
 
 
+margold_radar_20 = unwrap(dataframe[dataframe["Area"] == datasets[2]],features)
 
-#thwaites = ['thwaites']
+margold_radar_50 = unwrap(dataframe[dataframe["Area" ]== datasets[3]],features)
 
-features = ['Srough','contrast','dissimilarity','correlation','variance','entropy','label'] #,'Srough','label'] take out surface roughness
-
-trainingdata = dataframe[dataframe["Area"]== 'dubawnt']
-
-trainingdata = trainingdata.append(dataframe[dataframe["Area"] == 'brooks'])
-testdata = dataframe[dataframe["Area"]=='testset']  
-thwaitesdat = dataframe[dataframe["Area"] == 'thwaites']
-
-#trainingdata[trainingdata["Area"] == 'dubawnt']["label"] = 1 # temp
-
-print("Processing trainingdata\n")
-trainingdata = unwrap(trainingdata,features)
-
-print("Processing testdata \n")
-testdata = unwrap(testdata,features)
-
-print("Processing thwaitesdata\n")
-thwaitesdata = unwrap(thwaitesdat,features)
+margold_radar_75 = unwrap(dataframe[dataframe["Area" ]== datasets[4]],features)
 
 
+margold_orig = Dataset(margold_orig[:,:-1],margold_orig[:,-1])
+margold_radar_10 = Dataset(margold_radar_10[:,:-1],margold_radar_10[:,-1])
+margold_radar_20 = Dataset(margold_radar_20[:,:-1],margold_radar_20[:,-1])
+margold_radar_50 = Dataset(margold_radar_50[:,:-1],margold_radar_50[:,-1])
+margold_radar_75 = Dataset(margold_radar_75[:,:-1],margold_radar_75[:,-1])
 
-trainingdataset = Dataset(trainingdata[:,:-1],trainingdata[:,-1])
+margold_orig_loc = '/home/fdunbar/Research/surface-stats/margold_orig_data'
+margold_radar_10_loc = '/home/fdunbar/Research/surface-stats/margold_radar_10_data'
+margold_radar_20_loc = '/home/fdunbar/Research/surface-stats/margold_radar_20_data'
+margold_radar_50_loc = '/home/fdunbar/Research/surface-stats/margold_radar_50_data'
+margold_radar_75_loc = '/home/fdunbar/Research/surface-stats/margold_radar_75_data'
 
-testdataset = Dataset(testdata[:,:-1],testdata[:,-1])
-
-
-thwaitesdataset = Dataset(thwaitesdata[:,:-1],thwaitesdata[:,-1])
-
-traindataloc = "/home/fdunbar/Research/surface-stats/trainingdata_logtransformed_dist5.pkl"
-testdataloc = "/home/fdunbar/Research/surface-stats/testdata_logtransformed_dist5.pkl"
-
-writedata(trainingdataset,traindataloc)
-writedata(testdataset,testdataloc)
-writedata(thwaitesdataset,"/home/fdunbar/Research/surface-stats/thwaitesdata_logtrans_dist5.pkl")
-
+writedata(margold_orig,margold_orig_loc)
+writedata(margold_radar_10,margold_radar_10_loc)
+writedata(margold_radar_20,margold_radar_20_loc)
+writedata(margold_radar_50,margold_radar_50_loc)
+writedata(margold_radar_75,margold_radar_75_loc)

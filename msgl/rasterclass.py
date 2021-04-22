@@ -6,11 +6,12 @@ from scipy.sparse import coo_matrix
 import time
 import sys
 import matplotlib.pyplot as plt
-from joblib import Memory
+#from joblib import Memory,Parallel
 from progress.bar import Bar
-location = "/tmp"
-memory = Memory(location,verbose=0)
-
+import matplotlib.pyplot as plt
+#location = "/tmp"
+#memory = Memory(location,verbose=0)
+from numba import jit
 #@memory.cache
 
 
@@ -22,22 +23,22 @@ use different haralick features?
 
 '''
 def detrend(rasterclass):
-	#perform detrending by applying a gaussian filter with a std of 200m, and detrend
 
-	m,n = rasterclass.raster.shape
-	step = 2000
-	bar = Bar('Detrending',max=int(m/step)*int(n/step))
-	for i in range(0,m,step):
-		for j in range(0,n,step):
-			chunk = rasterclass.raster[i:i+step,j:j+step]
-			chunk[np.isnan(chunk)] = 0
-			chunk[chunk==None] = 0
-			trend = gaussian_filter(chunk,sigma=400)
-			chunk = chunk - trend
-			rasterclass.raster[i:i+step,j:j+step] = chunk
-			chunk = None
-			bar.next()
-	bar.finish()
+	rasterclass.raster[rasterclass.raster==0] = np.nan
+	V = rasterclass.raster.copy()
+	V[np.isnan(V)] = 0
+	V[V==None] = 0
+
+	W = 0*rasterclass.raster.copy() + 1
+	W[np.isnan(W)] = 0
+	VV = gaussian_filter(V,sigma=100)
+	WW = gaussian_filter(W,sigma=100)
+	trend = VV/WW
+	trend = np.rint(trend).astype(np.int)
+
+
+	rasterclass.raster = rasterclass.raster - trend
+
 	rasterclass.detrend_ = True
 
 
@@ -45,60 +46,100 @@ def detrend(rasterclass):
 def quantize(raster):
 
 	print("\n Quantizing \n")
-	if raster.detrend_:
-		m,n = raster.raster.shape
-		step = 1000
-		meanlist = []
-		stdlist = []
-		for i in range(0,m,step):
-		    for j in range(0,n,step):
-		        chunk = raster.raster[i:i+step,j:j+step]
-		        chunk[np.isnan(chunk)] = 0
-		        chunk[chunk==None] = 0
-		        meanlist.append(np.nanmean(chunk))
-		        stdlist.append(np.nanstd(chunk))
-		        raster.raster[i:i+step,j:j+step] = chunk
-		    mean_ = np.median(meanlist)
-		    meanlist = [mean_]
-		    std_ = np.median(stdlist)
-		    stdlist = [std_]
-		    chunk = None
+	'''
 
-		mean = np.median(meanlist)
-		std = np.median(stdlist)
+	raster.raster += np.abs(np.nanmin(raster.raster)) + 1
+	raster.raster[raster.raster == None] =np.nan
 
-		min_ = np.inf
-		for i in range(0,m,step):
-			for j in range(0,n,step):
-				chunk = raster.raster[i:i+step,j:j+step]
-				chunk[chunk > (mean + 2*std)] = 0
-				chunk[chunk < (mean - 2*std)] = 0
-				chunk = np.rint(chunk)
-				chunk[chunk>54] = 0
-				raster.raster[i:i+step,j:j+step] = chunk
-				if np.min(chunk) is not None and np.min(chunk) < min_ :
-					min_ = np.min(chunk)
-				chunk = None
+	mean = np.nanmean(raster.raster)
+	std = np.nanstd(raster.raster)
 
-		min_ = np.abs(min_) + 1
-		raster.raster = raster.raster +  min_
-		raster.raster = np.rint(raster.raster).astype(np.uint8)
+	raster.raster[raster.raster > mean + 2*std] = 0
+	raster.raster[raster.raster < mean + 2*std] = 0
+	raster.raster[np.isnan(raster.raster)] = 0
+	'''
+	raster.raster[np.isnan(raster.raster)] = int(0)
+	raster.raster = np.rint(raster.raster).astype(np.uint8)
+
+	range_ = np.nanmax(raster.raster) - np.nanmin(raster.raster)
+	raster.range = range_+1
+	print("\n\nRaster Range: {}\n\n".format(range_))
+	#print(f"Raster Datatype: {raster.raster.dtype}\n")
 
 
-
-
-			
-		flat = np.ndarray.flatten(raster.raster[raster.raster > 0])
-		range_ = np.max(flat) - np.min(flat)
-		print("\n\nRaster Range: {}\n\n".format(range_))
-		if range_ - 49 > 0: 
-			cutoff = range_ - 49
-			raster.raster[raster.raster == np.max(flat)] -= cutoff 
-
-	
+def log(x):
+	if x == 0.0:
+		return 0.0
 	else:
-		raise ValueError("Raster Has Not Been Detrended")
+		return np.log(x)
 
+def pxy(tensor,k,range_):
+	ng = range_-1
+	temp = 0.0
+	for i in range(ng):
+		for j in range(ng):
+			if i+j == k:
+				temp += tensor[i,j]
+	return temp
+
+def pxminusy(tensor,k,range_):
+	ng = range_-1
+	temp = 0
+	for i in range(ng):
+		for j in range(ng):
+			if np.abs(i-j) == k:
+				temp += tensor[i,j]
+	return temp	
+
+
+def entropy(tensor):
+	row, col, dist,azi = tensor.shape
+	vec = []
+	for i in range(azi):
+		temp = 0
+		for j in range(row):
+			for k in range(col):
+				tens_ = tensor[j,k,:,i].astype(np.float64)
+				temp += tens_*log(tens_)
+
+		entropy = (-1)*temp
+		vec.append(entropy)
+	return np.array(vec)
+
+def sum_entropy(tensor,range_):
+	row, col, dist,azi = tensor.shape
+	vec = []
+
+	assert row == col
+	for j in range(azi):
+		sumentrop= 0
+		for i in range(2,2*range_):
+			temp = pxy(tensor[:,:,:,j],i,range_)
+			sumentrop += temp*log(temp)
+		vec.append(sumentrop)
+	return np.array(vec)
+
+
+def diff_entropy(tensor,range_):
+	row, col, dist,azi = tensor.shape
+	vec = []
+	
+	for j in range(azi):
+		sumentrop = 0
+		for i in range(0,range_-1):
+			temp_ = pxminusy(tensor[:,:,:,j],i,range_)
+			sumentrop -= temp_*log(temp_)
+		vec.append(sumentrop)
+	return np.array(vec)
+
+
+def variance(tensor):
+	row, col, dist,azi = tensor.shape
+	vec = []
+	for i in range(azi):
+		var = np.nanstd(tensor[:,:,:,i])
+		vec.append(var)
+	return np.array(vec)
 
 class rasterClass():
 
@@ -115,9 +156,9 @@ class rasterClass():
 	
 		self.azis =  [0, np.pi/6, np.pi/4, np.pi/3, np.pi/2,2*np.pi/3, 3*np.pi/4,5*np.pi/6]
 
-		self.distance = 20
+		self.distance = 5
 		self.distances = np.arange(self.distance)
-		self.textProps = ['contrast','dissimilarity','homogeneity','ASM','energy','correlation']
+		self.textProps = ['contrast','dissimilarity','correlation','variance','entropy']
 		self.detrend_ = False
 		self.dfpath = df
 		if df is not None:
@@ -127,24 +168,25 @@ class rasterClass():
 		self.name = name
 		self.height =self.raster.shape[0]
 		self.width = self.raster.shape[1]
+		self.range = int(np.nanmax(self.raster))
+
 
 	def surfRough(self,image):
 		return np.nanstd(image)
 
 
-	#@memory.cache
 	def greycomatrix(self,image):
 		# returns a [(levels,levels),distance,angle] array
-	
-		matrices = greycomatrix(image,distances=self.distances,levels=55,angles=self.azis)
+
+		matrices = greycomatrix(image,distances=self.distances,levels=self.range,angles=self.azis)
 		matrices = matrices[1:,1:,:,:] # remove entries respectice to Nan values
 		
 		return matrices
 
 	
-	#@memory.cache
+
 	def comatprops(self,image):
-		
+	
 		# returns a haralick feature for each image respective to a given azimuth
 		temp = np.zeros((image.shape[0],image.shape[1],1,image.shape[3]))
 
@@ -156,32 +198,34 @@ class rasterClass():
 			# remove all other distances
 			
 			
-			temp[:,:,0,i] = temp[:,:,0,i] + temp[:,:,0,i].transpose() #make symmetric
+			#temp[:,:,0,i] = temp[:,:,0,i] + temp[:,:,0,i].transpose() #make symmetric
 			temp[:,:,0,i] = temp[:,:,0,i] / np.sum(temp[:,:,0,i]) # normalize
 			
 			
 		features = {}
+		
 		for prop in self.textProps:
-			featvec = greycoprops(temp,prop=prop)
+			if prop is 'entropy':
+				featvec = entropy(temp[:,:,0,:][:,:,np.newaxis,:])
+			elif prop is 'sum_entropy':
+				featvec = sum_entropy(temp[:,:,0,:][:,:,np.newaxis,:],self.range)
+			elif prop is 'diff_entropy':
+				featvec = diff_entropy(temp[:,:,0,:][:,:,np.newaxis,:],self.range)
+			elif prop is 'variance':
+				featvec = variance( temp[:,:,0,:][:,:,np.newaxis,:] )
+
+			else:
+				featvec = greycoprops(temp[:,:,0,:][:,:,np.newaxis,:],prop=prop)
 			#print("\n",featvec,"\n")
-			features[prop] =featvec
+			#featvec = [self.log(feature) for feature in featvec.tolist()]
+			featvec[featvec == np.inf] = 0
+			featvec[featvec == -np.inf] = 0
+
+			features[prop] = featvec
 		return features
 
-	def boxPlot(self):
-		'''
-		Create a boxplot of the response values so as to see if the data falls within a given range upon trend removal.
-		The quantization step assumes that the data has been detrended so as to reduce the range of elevation values
-		<= 100
-		'''
-		if self.detrend_:
-			fig,ax = plt.subplots()
-			ax.set_title("Boxplot of Detrended Elevation Values")
-			ax.boxplot(np.ndarray.flatten(self.raster))
-		else:
-			raise ValueError("Raster Has Not Been Detrended")
 
-
-
+	#@jit()
 	def mergeDicts(self,dicts):
 		main = {}
 		for dict_ in dicts:
@@ -189,6 +233,7 @@ class rasterClass():
 		#main = sorted(main.items())
 		return main
 
+	
 	def saveDF(self,path):
 		print("\n\nSaving DataFrame\n\n")
 		if self.dfpath == None:
@@ -199,6 +244,7 @@ class rasterClass():
 
 
 	def iterate(self):
+		self.raster = self.raster.astype(np.uint8)
 		print("{} Raster Datatype: {}".format(self.name,self.raster.dtype))
 		counter = 0
 		overall = time.time()
@@ -208,7 +254,8 @@ class rasterClass():
 				indi = int(i/self.grid)
 				indj = int(j/self.grid)
 				
-				image = self.raster[i:i+self.grid,j:j+self.grid]
+				image = self.raster[i:i+self.grid,j:j+self.grid].astype(np.int)
+
 				glcm =  self.greycomatrix(image)
 				
 				featuredicts = [self.comatprops(glcm)]
@@ -227,10 +274,10 @@ class rasterClass():
 		overall = time.time() - overall
 		print("\nIteration Done, Elapse Time: {} for {} Quadrats\n".format((np.round(overall)),counter))
 
-	def runAll(self,path=None):
-		detrend(self)
-	
-		quantize(self)
+
+	def runAll(self,path=None,detrend_=True,quantize_=True):
+		if detrend_: detrend(self)
+		if quantize_: quantize(self)
 		self.iterate()
 		self.saveDF(path)
 
